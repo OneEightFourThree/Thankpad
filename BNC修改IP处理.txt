@@ -1,0 +1,208 @@
+﻿1.void reslvToBNC(char *inPdu_ ,void *icsd_ ,void *dbh_)
+	// tcpID = pas.getMaxTCPIDfromDB();
+	// tcpID++;
+	// pas.updateBaseTcpAssociateTable(jsStruct.IP,(char *)test3.c_str(),tcpID);
+	// knBzero(&ncf, sizeof(knNetConf));
+	// // 获取网络配置。
+	// knGetNetConf(&ncf, libPath);
+	// //myNewTCPClient(ipnc,&ncf.tcpClientDl, icsd_);		
+	// pas.updateBaseTcpAssociateTable(0);
+
+	// cache = ss->getCachePtr();
+	// count = ss->getCount();
+	// ss->MutexLock();
+	// strcpy(cache->MMSI[count],(char *)test3.c_str());
+	// sprintf(cache->TCPID[count],"%d", tcpID);
+	// sprintf(cache->IP[count],"%s",(char *)jsStruct.IP);
+	// count++;
+	// ss->setCount(count);
+	// ss->MutexUnlock();
+	// test3.clear();
+	// test4.clear();
+	Cache	*cache =NULL;
+	int	ccount;
+	knNetConf	ncf;
+	knIPNC		ipnc[2];			// 网口配置。
+	char		libPath[5120] = "D:\\vdes\\proj\\testChannel2\\testChannel\\TCP_MESG_Skelte\\lib\\";
+	
+	tcpID = pas.getMaxTCPIDfromDB();
+	if(tcpID == -1){
+		tcpID += 2;
+	}
+	else{
+		tcpID++;
+	}
+	pas.updateBaseTcpAssociateTable(jsStruct.IP,(char *)test3.c_str(),tcpID);
+	knBzero(&ncf, sizeof(knNetConf));
+	// 获取网络配置。
+	knGetNetConf(&ncf, libPath);
+	myNewTCPClient(ipnc,&ncf.tcpClientDl,dataBus_);
+	knReWriteNetConf(&ncf, libPath);
+	pas.updateBaseTcpAssociateTable(0);
+	knSleep(1);
+	cache = ss->getCachePtr();
+	ss->MutexLock();
+	ccount = GetINFOfromDB(dbh_,cache);
+	ss->setCount(ccount);
+	ss->MutexUnlock();
+	test3.clear();
+	test4.clear();
+	
+	
+2.PaService.c
+	/** 方法：从数据库获取TCPID字段的最大值。
+	输入：void 。
+	返回：int tcpid。
+	注释：
+	*/
+	int PaService::getMaxTCPIDfromDB(void)
+	{
+		knSQL sql;		//SQL句柄
+		int tcpid;
+		char preBuf[256] = {0};
+		char aftBuf[5120] = {0};
+		this->m_jsd.toSqlForSelectMAXTCPIDFromDB(&sql);
+		dbRequest(this->m_db,&sql);
+		knGetSubstringFromStr(preBuf,aftBuf,'|',sql.sql,KN_STR_NO_FILTER);
+		knAtoi(preBuf,&tcpid);
+		return tcpid;
+	}
+	
+	/** 方法：将最新的岸站ip和tcpid更新到数据库
+	输入：void 。
+	返回：int tcpid。
+	注释：
+	*/
+	int PaService::updateBaseTcpAssociateTable(void *ip,char *mmsi,int tcpID)
+	{
+		knSQL sql;		//SQL句柄
+		knBzero(&sql,sizeof(knSQL));
+		sprintf(sql.tag,"SDU");
+		sprintf(sql.sql,"INSERT INTO `base_tcp_associate_table` (`BASEMMSI`,`TCPID`,`TCP`) VALUES ('%s', %d, '%s');",mmsi,tcpID,ip);
+		sql.len = strlen(sql.sql);
+		sql.fk = 0;
+		dbPutToInMq(this->m_db,&sql);
+		return 0;
+	}
+	
+	/** 方法：将最新的岸站ip和tcpid更新到数据库
+	输入：void 。
+	返回：int tcpid。
+	注释：
+	*/
+	int PaService::updateBaseTcpAssociateTable(long mmsi)
+	{
+		knSQL sql;		//sql句柄
+		knBzero(&sql,sizeof(knSQL));
+		sprintf(sql.tag,"SDU");
+		sprintf(sql.sql,"UPDATE `base_tcp_associate_table` SET BASEMMSI = '%09d' WHERE  TCP = '192.168.11.10';",mmsi);
+		sql.len = strlen(sql.sql);
+		sql.fk = 0;
+		dbPutToInMq(this->m_db,&sql);
+		return 0;
+	}
+	
+3.PaService.h
+	/** 方法：从数据库获取TCPID字段的最大值。
+	输入：void 。
+	返回：int tcpid。
+	注释：
+	*/
+	int getMaxTCPIDfromDB(void);
+	/** 方法：将最新的岸站ip和tcpid更新到数据库
+	输入：void 。
+	返回：int tcpid。
+	注释：
+	*/
+	int updateBaseTcpAssociateTable(void *ip,char *mmsi,int tcpID);
+	/** 方法：将最新的岸站ip和tcpid更新到数据库
+	输入：void 。
+	返回：int tcpid。
+	注释：
+	*/
+	int updateBaseTcpAssociateTable(long mmsi);
+	
+4.AnalyToHandle.c
+	case 4:
+	case 11:
+		//解析VDM里的ITU4号消息
+		unPackVDMITUa4(str2,&VDM_ITU4);
+		pas.setBaseStaticStruct(&VDM_ITU4);
+		pas.saveBaseDataToDB(&VDM_ITU4);
+		if( VDM_ITU4.bMsgNum == 4)
+		{
+			pas.saveBASEMMSItoBASESTATEINFODB();
+			if(!strcmp(ip_,"192.168.11.10"))
+			{
+				pas.updateBaseTcpAssociateTable(VDM_ITU4.uMsgID4MMSI);
+			}
+		}
+		strcpy(tableName,"basereport");
+		knLtoa((long )VDM_ITU4.uMsgID4MMSI,MsgID);		//是否可行?
+		break;
+5.JsonData.h
+		int toSqlForSelectMAXTCPIDFromDB(knSQL *sql_);
+6.JsonData.c
+	int JsonData::toSqlForSelectMAXTCPIDFromDB(knSQL *sql_)
+	{
+		knBzero(sql_,sizeof(knSQL));
+		sprintf(sql_->tag,"SEL");
+		sprintf(sql_->sql,"select MAX(`TCPID`) from `base_tcp_associate_table`");
+		sql_->len = strlen(sql_->sql);
+		sql_->fk = 1;
+		return 0;
+	}
+		
+		
+	
+	
+	
+	
+	
+	
+7.ReslvToPack.c
+
+void reslvToSID(char *inPdu_ ,void *icsd_ ,void *dbh_)
+{
+	pas.UpdateBASETCPTable(curMMSI,newMMSI);
+}
+
+8.PaService.h
+
+void UpdateBASETCPTable(long curMMSI,long newMMSI);
+
+9.PaService.c
+
+void PaService::UpdateBASETCPTable(long curMMSI,long newMMSI)
+{
+	knSQL sql;
+	sprintf(sql.tag,"SDU");
+	sprintf(sql.sql,"UPDATE `base_tcp_associate_table` SET BASEMMSI = '%09d' WHERE BASEMMSI = '%09d';",newMMSI,curMMSI);
+	sql.len = strlen(sql.sql);
+	sql.fk = 0;
+	dbPutToInMq(this->db,&sql);
+	return ;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
